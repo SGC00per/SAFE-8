@@ -509,14 +509,20 @@ class SAFE8Assessment {
         const overallScore = this.calculateCurrentScore()
         
         try {
-            const response = await axios.post('/api/assessments', {
+            const submissionData = {
                 leadId: this.leadData.id,
                 assessmentType: this.selectedAssessmentType,
                 industry: this.selectedIndustry,
                 responses: this.responses,
                 overallScore,
                 dimensionScores
-            })
+            }
+            
+            console.log('Submitting assessment:', submissionData)
+            
+            const response = await axios.post('/api/assessments', submissionData)
+            
+            console.log('Assessment response:', response.data)
             
             this.assessmentResults = response.data
             this.renderResults()
@@ -528,6 +534,14 @@ class SAFE8Assessment {
     
     renderResults() {
         const { overallScore, dimensionScores, insights, benchmarks } = this.assessmentResults
+        
+        console.log('Rendering results with data:', {
+            overallScore,
+            dimensionScores,
+            insights,
+            insightsLength: insights ? insights.length : 'undefined',
+            benchmarks: benchmarks ? benchmarks.length : 'undefined'
+        })
         
         document.getElementById('app').innerHTML = `
             <div class="min-h-screen bg-gray-50 py-8">
@@ -560,11 +574,11 @@ class SAFE8Assessment {
                             <div class="bg-white rounded-xl shadow-lg p-8">
                                 <h3 class="text-xl font-semibold text-gray-800 mb-6">Key Insights</h3>
                                 <div class="space-y-3">
-                                    ${insights.map(insight => `
+                                    ${insights && insights.length > 0 ? insights.map(insight => `
                                         <div class="p-3 bg-gray-50 rounded-lg">
                                             <p class="text-sm">${insight}</p>
                                         </div>
-                                    `).join('')}
+                                    `).join('') : '<div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg"><p class="text-sm text-yellow-800">No insights available. This may be due to insufficient benchmark data for your industry.</p></div>'}
                                 </div>
                             </div>
                         </div>

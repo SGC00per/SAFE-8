@@ -74,23 +74,101 @@ const calculateOverallScore = (dimensionScores: Record<string, number>) => {
 const generateInsights = (dimensionScores: Record<string, number>, industry: string, benchmarks: any[]) => {
   const insights = []
   
-  // Compare against industry benchmarks
+  // Get industry benchmarks if available
   const industryBenchmarks = benchmarks.filter(b => b.industry === industry)
   
+  // Generic scoring thresholds (fallback when no industry data)
+  const genericThresholds = {
+    excellent: 85,   // Top quartile threshold
+    good: 70,       // Above average threshold
+    average: 55,    // Average threshold
+    // Below 55 = needs improvement
+  }
+  
   Object.entries(dimensionScores).forEach(([dimension, score]) => {
+    // Try to find industry-specific benchmark
     const benchmark = industryBenchmarks.find(b => b.dimension === dimension)
+    
+    let insight = ''
+    let recommendation = ''
+    
     if (benchmark) {
+      // Use industry-specific benchmarks
       if (score >= benchmark.top_quartile_score) {
-        insights.push(`🟢 ${dimension}: Excellent performance (Top Quartile)`)
+        insight = `🟢 ${dimension}: Excellent performance (Top Quartile for ${industry})`
+        recommendation = 'Maintain this strength and consider sharing best practices across your organization.'
       } else if (score >= benchmark.median_score) {
-        insights.push(`🟡 ${dimension}: Above average performance`)
+        insight = `🟡 ${dimension}: Above average performance (vs ${industry} industry)`
+        recommendation = 'Good foundation - focus on incremental improvements to reach top quartile.'
       } else if (score >= benchmark.average_score) {
-        insights.push(`🟠 ${dimension}: Room for improvement`)
+        insight = `🟠 ${dimension}: Below median performance (vs ${industry} industry)`
+        recommendation = 'Significant improvement opportunity - prioritize initiatives in this area.'
       } else {
-        insights.push(`🔴 ${dimension}: Critical gap requiring attention`)
+        insight = `🔴 ${dimension}: Critical gap (Bottom quartile for ${industry})`
+        recommendation = 'Urgent attention required - this represents a major competitive risk.'
+      }
+    } else {
+      // Use generic thresholds with actionable insights
+      if (score >= genericThresholds.excellent) {
+        insight = `🟢 ${dimension}: Excellent performance (${score}%)`
+        recommendation = 'Outstanding capability - leverage this strength for competitive advantage.'
+      } else if (score >= genericThresholds.good) {
+        insight = `🟡 ${dimension}: Good performance (${score}%)`
+        recommendation = 'Solid foundation - focus on optimization and advanced capabilities.'
+      } else if (score >= genericThresholds.average) {
+        insight = `🟠 ${dimension}: Average performance (${score}%)`
+        recommendation = 'Improvement needed - develop a focused action plan for this area.'
+      } else {
+        insight = `🔴 ${dimension}: Below average performance (${score}%)`
+        recommendation = 'Critical priority - immediate investment and strategic focus required.'
       }
     }
+    
+    insights.push(`${insight} - ${recommendation}`)
   })
+  
+  // Add overall strategic insights based on score patterns
+  const avgScore = Object.values(dimensionScores).reduce((a, b) => a + b, 0) / Object.values(dimensionScores).length
+  
+  if (avgScore >= 80) {
+    insights.push(`🚀 Overall Assessment: Strong AI readiness position (${Math.round(avgScore)}%) - Focus on innovation and scaling successful practices.`)
+  } else if (avgScore >= 65) {
+    insights.push(`📈 Overall Assessment: Moderate AI readiness (${Math.round(avgScore)}%) - Prioritize addressing weakest areas while building on strengths.`)
+  } else if (avgScore >= 50) {
+    insights.push(`⚠️ Overall Assessment: Developing AI readiness (${Math.round(avgScore)}%) - Establish foundational capabilities before pursuing advanced initiatives.`)
+  } else {
+    insights.push(`🚨 Overall Assessment: Early-stage AI readiness (${Math.round(avgScore)}%) - Urgent need for comprehensive AI strategy and capability development.`)
+  }
+  
+  // Add dimension-specific strategic recommendations
+  const criticalDimensions = Object.entries(dimensionScores).filter(([_, score]) => score < 60)
+  
+  if (criticalDimensions.length > 0) {
+    insights.push(`🎯 Priority Focus Areas: ${criticalDimensions.map(([dim]) => dim).join(', ')} require immediate attention to build AI readiness foundation.`)
+  }
+  
+  // Add actionable next steps based on lowest scoring dimensions
+  const lowestDimension = Object.entries(dimensionScores).reduce((min, curr) => 
+    curr[1] < min[1] ? curr : min
+  )
+  
+  const actionableRecommendations = {
+    'Strategic Alignment': 'Develop a formal AI strategy document, establish AI governance committee, and align AI initiatives with business objectives.',
+    'Architecture & Infrastructure': 'Assess current IT infrastructure capacity, implement cloud-based AI platforms, and establish data pipeline architecture.',
+    'Foundation & Governance': 'Create AI ethics guidelines, establish risk management frameworks, and implement AI project approval processes.',
+    'Ethics & Trust': 'Develop responsible AI principles, implement bias testing protocols, and establish transparency requirements.',
+    'Data & Analytics': 'Improve data quality processes, implement data governance frameworks, and establish analytics capabilities.',
+    'Innovation & Agility': 'Create innovation labs, establish experimentation processes, and build rapid prototyping capabilities.',
+    'Workforce & Culture': 'Implement AI literacy training, develop change management programs, and foster AI-positive culture.',
+    'Execution & Operations': 'Establish AI project management practices, implement monitoring systems, and develop maintenance protocols.'
+  }
+  
+  if (lowestDimension && lowestDimension[1] < 70) {
+    const nextSteps = actionableRecommendations[lowestDimension[0]]
+    if (nextSteps) {
+      insights.push(`🔧 Immediate Action Plan for ${lowestDimension[0]}: ${nextSteps}`)
+    }
+  }
   
   return insights
 }
