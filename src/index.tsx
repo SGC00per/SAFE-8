@@ -140,9 +140,9 @@ app.post('/api/leads', zValidator('json', leadSchema), async (c) => {
           updated_at = CURRENT_TIMESTAMP
         WHERE email = ?
       `).bind(
-        leadData.companyName, leadData.contactName, leadData.phoneNumber,
-        leadData.jobTitle, leadData.industry, leadData.companySize, 
-        leadData.country, leadData.email
+        leadData.companyName, leadData.contactName, leadData.phoneNumber || null,
+        leadData.jobTitle || null, leadData.industry, leadData.companySize || null, 
+        leadData.country || null, leadData.email
       ).run()
       
       if (success) {
@@ -156,8 +156,8 @@ app.post('/api/leads', zValidator('json', leadSchema), async (c) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         leadData.email, leadData.companyName, leadData.contactName,
-        leadData.phoneNumber, leadData.jobTitle, leadData.industry,
-        leadData.companySize, leadData.country
+        leadData.phoneNumber || null, leadData.jobTitle || null, leadData.industry,
+        leadData.companySize || null, leadData.country || null
       ).run()
       
       if (success) {

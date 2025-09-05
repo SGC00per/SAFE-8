@@ -279,6 +279,11 @@ class SAFE8Assessment {
     }
     
     showQuestion() {
+        if (!this.questions || this.questions.length === 0) {
+            alert('No questions loaded. Please try again.')
+            return
+        }
+        
         if (this.currentQuestionIndex >= this.questions.length) {
             this.showResults()
             return
@@ -621,8 +626,16 @@ class SAFE8Assessment {
     }
 }
 
-// Initialize the application when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-    const app = new SAFE8Assessment()
-    window.app = app // Make it globally accessible
-})
+// Initialize the application
+window.app = null
+
+function initApp() {
+    window.app = new SAFE8Assessment()
+}
+
+// Try to initialize immediately, or wait for DOM ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp)
+} else {
+    initApp()
+}
