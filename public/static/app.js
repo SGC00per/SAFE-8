@@ -26,7 +26,10 @@ class SAFE8Assessment {
     }
     
     hideLoadingScreen() {
-        document.getElementById('loading-screen').style.display = 'none'
+        const loadingScreen = document.getElementById('loading-screen')
+        if (loadingScreen) {
+            loadingScreen.style.display = 'none'
+        }
     }
     
     async showWelcomeScreen() {
@@ -326,7 +329,7 @@ class SAFE8Assessment {
                                     { value: 3, text: 'Agree', color: 'bg-blue-50 hover:bg-blue-100 border-blue-200' },
                                     { value: 2, text: 'Disagree', color: 'bg-yellow-50 hover:bg-yellow-100 border-yellow-200' },
                                     { value: 1, text: 'Strongly Disagree', color: 'bg-red-50 hover:bg-red-100 border-red-200' },
-                                    { value: 0, text: 'Not Applicable / Don\\'t Know', color: 'bg-gray-50 hover:bg-gray-100 border-gray-200' }
+                                    { value: 0, text: 'Not Applicable / Don\'t Know', color: 'bg-gray-50 hover:bg-gray-100 border-gray-200' }
                                 ].map(option => `
                                     <button class="likert-option w-full p-4 text-left border-2 rounded-lg transition-all ${option.color}"
                                             onclick="app.selectAnswer(${question.id}, ${option.value})">
@@ -618,5 +621,8 @@ class SAFE8Assessment {
     }
 }
 
-// Initialize the application
-const app = new SAFE8Assessment()
+// Initialize the application when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    const app = new SAFE8Assessment()
+    window.app = app // Make it globally accessible
+})
