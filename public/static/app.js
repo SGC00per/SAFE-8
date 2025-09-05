@@ -53,7 +53,7 @@ class SAFE8Assessment {
                                 <h2 class="text-3xl font-bold text-gray-800 mb-6 text-center">Choose Your Assessment Level</h2>
                                 
                                 <div class="grid md:grid-cols-3 gap-6 mb-8">
-                                    <div class="assessment-card bg-white rounded-xl p-6 shadow-lg cursor-pointer" onclick="app.selectAssessmentType('CORE')">
+                                    <div class="assessment-card bg-white rounded-xl p-6 shadow-lg cursor-pointer" data-assessment-type="CORE">
                                         <div class="text-center mb-4">
                                             <i class="fas fa-rocket text-4xl text-blue-600 mb-3"></i>
                                             <h3 class="text-xl font-semibold text-gray-800">Core Assessment</h3>
@@ -69,7 +69,7 @@ class SAFE8Assessment {
                                         </div>
                                     </div>
                                     
-                                    <div class="assessment-card bg-white rounded-xl p-6 shadow-lg cursor-pointer" onclick="app.selectAssessmentType('ADVANCED')">
+                                    <div class="assessment-card bg-white rounded-xl p-6 shadow-lg cursor-pointer" data-assessment-type="ADVANCED">
                                         <div class="text-center mb-4">
                                             <i class="fas fa-cogs text-4xl text-blue-600 mb-3"></i>
                                             <h3 class="text-xl font-semibold text-gray-800">Advanced Assessment</h3>
@@ -85,7 +85,7 @@ class SAFE8Assessment {
                                         </div>
                                     </div>
                                     
-                                    <div class="assessment-card bg-white rounded-xl p-6 shadow-lg cursor-pointer" onclick="app.selectAssessmentType('FRONTIER')">
+                                    <div class="assessment-card bg-white rounded-xl p-6 shadow-lg cursor-pointer" data-assessment-type="FRONTIER">
                                         <div class="text-center mb-4">
                                             <i class="fas fa-brain text-4xl text-blue-600 mb-3"></i>
                                             <h3 class="text-xl font-semibold text-gray-800">Frontier Assessment</h3>
@@ -110,13 +110,13 @@ class SAFE8Assessment {
                                     <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
                                         ${this.industries.map(industry => `
                                             <button class="industry-btn p-3 bg-gray-100 hover:bg-blue-100 rounded-lg text-sm font-medium transition-colors"
-                                                    onclick="app.selectIndustry('${industry}')">${industry}</button>
+                                                    data-industry="${industry}">${industry}</button>
                                         `).join('')}
                                     </div>
                                     
                                     <div class="text-center">
                                         <button id="start-assessment-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                onclick="app.showLeadForm()" disabled>
+                                                disabled>
                                             Start SAFE-8 Assessment
                                         </button>
                                     </div>
@@ -127,25 +127,63 @@ class SAFE8Assessment {
                 </div>
             </div>
         `
+        
+        // Add event listeners after DOM is updated
+        setTimeout(() => this.attachEventListeners(), 100)
+    }
+    
+    attachEventListeners() {
+        // Assessment type selection
+        document.querySelectorAll('.assessment-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                const type = e.currentTarget.getAttribute('data-assessment-type')
+                this.selectAssessmentType(type)
+            })
+        })
+        
+        // Industry selection  
+        document.querySelectorAll('.industry-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const industry = e.currentTarget.getAttribute('data-industry')
+                this.selectIndustry(industry)
+            })
+        })
+        
+        // Start assessment button
+        const startBtn = document.getElementById('start-assessment-btn')
+        if (startBtn) {
+            startBtn.addEventListener('click', () => {
+                this.showLeadForm()
+            })
+        }
     }
     
     selectAssessmentType(type) {
+        console.log('Selected assessment type:', type)
         this.selectedAssessmentType = type
         
         // Update UI
         document.querySelectorAll('.assessment-card').forEach(card => {
             card.classList.remove('selected')
         })
-        event.currentTarget.classList.add('selected')
+        
+        // Find and highlight the selected card
+        document.querySelectorAll('.assessment-card').forEach(card => {
+            if (card.getAttribute('data-assessment-type') === type) {
+                card.classList.add('selected')
+            }
+        })
         
         // Show industry section
-        document.getElementById('industry-section').classList.remove('hidden')
-        
-        // Scroll to industry section
-        document.getElementById('industry-section').scrollIntoView({ behavior: 'smooth' })
+        const industrySection = document.getElementById('industry-section')
+        if (industrySection) {
+            industrySection.classList.remove('hidden')
+            industrySection.scrollIntoView({ behavior: 'smooth' })
+        }
     }
     
     selectIndustry(industry) {
+        console.log('Selected industry:', industry)
         this.selectedIndustry = industry
         
         // Update UI
@@ -153,14 +191,33 @@ class SAFE8Assessment {
             btn.classList.remove('bg-blue-600', 'text-white')
             btn.classList.add('bg-gray-100', 'hover:bg-blue-100')
         })
-        event.currentTarget.classList.remove('bg-gray-100', 'hover:bg-blue-100')
-        event.currentTarget.classList.add('bg-blue-600', 'text-white')
+        
+        // Find and highlight the selected industry button
+        document.querySelectorAll('.industry-btn').forEach(btn => {
+            if (btn.getAttribute('data-industry') === industry) {
+                btn.classList.remove('bg-gray-100', 'hover:bg-blue-100')
+                btn.classList.add('bg-blue-600', 'text-white')
+            }
+        })
         
         // Enable start button
-        document.getElementById('start-assessment-btn').disabled = false
+        const startBtn = document.getElementById('start-assessment-btn')
+        if (startBtn) {
+            startBtn.disabled = false
+        }
     }
     
     showLeadForm() {
+        console.log('Showing lead form. Current state:', {
+            selectedAssessmentType: this.selectedAssessmentType,
+            selectedIndustry: this.selectedIndustry
+        });
+        
+        if (!this.selectedAssessmentType || !this.selectedIndustry) {
+            alert('Please select both an assessment type and industry first.');
+            return;
+        }
+        
         document.getElementById('app').innerHTML = `
             <div class="min-h-screen bg-gray-50 py-8">
                 <div class="container mx-auto px-4">
@@ -264,8 +321,15 @@ class SAFE8Assessment {
     
     async loadQuestions() {
         try {
+            console.log('Loading questions for assessment type:', this.selectedAssessmentType)
+            if (!this.selectedAssessmentType) {
+                console.error('No assessment type selected!')
+                alert('Please select an assessment type first.')
+                return
+            }
             const response = await axios.get(`/api/questions/${this.selectedAssessmentType}`)
             this.questions = response.data.questions
+            console.log(`Loaded ${this.questions.length} questions`)
         } catch (error) {
             console.error('Error loading questions:', error)
             alert('Error loading assessment. Please try again.')
@@ -626,16 +690,7 @@ class SAFE8Assessment {
     }
 }
 
-// Initialize the application
-window.app = null
-
-function initApp() {
-    window.app = new SAFE8Assessment()
-}
-
-// Try to initialize immediately, or wait for DOM ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initApp)
-} else {
-    initApp()
-}
+// Initialize the application immediately - no waiting
+console.log('Initializing SAFE8Assessment app...');
+window.app = new SAFE8Assessment();
+console.log('App initialized and available globally as window.app');

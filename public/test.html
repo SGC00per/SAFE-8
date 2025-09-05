@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Assessment Flow</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>Test Assessment Flow</h1>
+    
+    <button onclick="testSelectAssessmentType()">1. Select CORE Assessment</button><br><br>
+    <button onclick="testSelectIndustry()">2. Select Technology Industry</button><br><br>
+    <button onclick="testCreateLead()">3. Create Test Lead</button><br><br>
+    <button onclick="testLoadQuestions()">4. Load Questions</button><br><br>
+    
+    <div id="output"></div>
+
+    <script>
+        let testSelectedAssessmentType = null;
+        let testSelectedIndustry = null;
+        let testLeadId = null;
+        let testQuestions = [];
+        
+        function log(message) {
+            document.getElementById('output').innerHTML += '<p>' + message + '</p>';
+            console.log(message);
+        }
+        
+        function testSelectAssessmentType() {
+            testSelectedAssessmentType = 'CORE';
+            log('✅ Selected assessment type: ' + testSelectedAssessmentType);
+        }
+        
+        function testSelectIndustry() {
+            testSelectedIndustry = 'Technology';
+            log('✅ Selected industry: ' + testSelectedIndustry);
+        }
+        
+        async function testCreateLead() {
+            try {
+                const leadData = {
+                    email: 'debug@test.com',
+                    companyName: 'Debug Company',
+                    contactName: 'Debug User',
+                    industry: testSelectedIndustry || 'Technology'
+                };
+                
+                log('🔄 Creating lead with data: ' + JSON.stringify(leadData));
+                
+                const response = await axios.post('/api/leads', leadData);
+                testLeadId = response.data.leadId;
+                log('✅ Lead created successfully with ID: ' + testLeadId);
+            } catch (error) {
+                log('❌ Error creating lead: ' + error.message);
+                console.error(error);
+            }
+        }
+        
+        async function testLoadQuestions() {
+            try {
+                if (!testSelectedAssessmentType) {
+                    log('❌ No assessment type selected!');
+                    return;
+                }
+                
+                log('🔄 Loading questions for type: ' + testSelectedAssessmentType);
+                
+                const response = await axios.get('/api/questions/' + testSelectedAssessmentType);
+                testQuestions = response.data.questions;
+                log('✅ Loaded ' + testQuestions.length + ' questions');
+                log('First question: ' + testQuestions[0].question_text);
+            } catch (error) {
+                log('❌ Error loading questions: ' + error.message);
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>
