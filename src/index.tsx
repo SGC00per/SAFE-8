@@ -3,12 +3,17 @@ import { cors } from 'hono/cors'
 import { serveStatic } from 'hono/cloudflare-workers'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
+import { AIInsightsEngine, type AssessmentContext } from './ai-insights'
+import { LeadScoringEngine, type LeadProfile } from './lead-scoring'
+import { ConsultationService, type ConsultationBooking } from './consultation-service'
+import { MonitoringService } from './monitoring-service'
 
 // Type definitions for Cloudflare bindings
 type Bindings = {
   DB: D1Database;
   EMAIL_API_KEY?: string;
   ADMIN_EMAIL?: string;
+  OPENAI_API_KEY?: string;
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -38,6 +43,21 @@ const assessmentSchema = z.object({
   responses: z.record(z.number()), // questionId -> score
   overallScore: z.number().min(0).max(100),
   dimensionScores: z.record(z.number()) // dimension -> score
+})
+
+const consultationBookingSchema = z.object({
+  leadId: z.number(),
+  assessmentId: z.number().optional(),
+  consultationType: z.enum(['STRATEGY', 'TECHNICAL', 'IMPLEMENTATION']),
+  preferredDate: z.string().optional(),
+  preferredTime: z.string().optional(),
+  timezone: z.string().optional(),
+  consultationDuration: z.number().min(15).max(180).optional(),
+  topicFocus: z.array(z.string()).optional(),
+  urgencyLevel: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+  companyBackground: z.string().optional(),
+  specificChallenges: z.string().optional(),
+  meetingPreference: z.enum(['VIRTUAL', 'IN_PERSON', 'PHONE']).optional()
 })
 
 // Utility functions
@@ -271,8 +291,32 @@ app.post('/api/assessments', zValidator('json', assessmentSchema), async (c) => 
       SELECT * FROM industry_benchmarks WHERE industry = ?
     `).bind(assessmentData.industry).all()
     
-    // Generate insights
-    const insights = generateInsights(dimensionScores, assessmentData.industry, benchmarks)
+    // Generate AI-powered insights
+    let insights: string[] = []
+    
+    if (env.OPENAI_API_KEY) {
+      try {
+        const aiEngine = new AIInsightsEngine(env.OPENAI_API_KEY)
+        const context: AssessmentContext = {
+          dimensionScores,
+          responses: assessmentData.responses,
+          industry: assessmentData.industry,
+          overallScore,
+          benchmarks
+        }
+        
+        const aiInsights = await aiEngine.generatePersonalizedInsights(context)
+        insights = aiInsights.map(insight => 
+          `${insight.type === 'strength' ? '💪' : insight.type === 'risk' ? '⚠️' : insight.type === 'recommendation' ? '💡' : '🎯'} ${insight.insight} - ${insight.actionItems[0] || 'Action required'}`
+        )
+      } catch (error) {
+        console.error('AI insights failed, using fallback:', error)
+        insights = generateInsights(dimensionScores, assessmentData.industry, benchmarks)
+      }
+    } else {
+      // Use enhanced static insights as fallback
+      insights = generateInsights(dimensionScores, assessmentData.industry, benchmarks)
+    }
     
     // Save assessment
     const { success, meta } = await env.DB.prepare(`
@@ -297,6 +341,14 @@ app.post('/api/assessments', zValidator('json', assessmentSchema), async (c) => 
         INSERT INTO notifications (assessment_id, email_type, recipient_email)
         VALUES (?, 'ASSESSMENT_COMPLETE', ?)
       `).bind(assessmentId, env.ADMIN_EMAIL || 'shane@forvismazars.com').run()
+      
+      // Create monitoring schedule for continuous assessment
+      const monitoringService = new MonitoringService(env.DB)
+      await monitoringService.createMonitoringSchedule(
+        assessmentData.leadId, 
+        assessmentId as number, 
+        'QUARTERLY'
+      )
       
       return c.json({ 
         assessmentId, 
@@ -349,14 +401,18 @@ app.get('/api/assessments/:id', async (c) => {
   }
 })
 
-// Admin dashboard - get all leads
+// Admin dashboard - get all leads with smart scoring
 app.get('/api/admin/leads', async (c) => {
   const { env } = c
   
   try {
     const { results } = await env.DB.prepare(`
-      SELECT l.*, COUNT(a.id) as assessment_count,
-             MAX(a.completed_at) as last_assessment
+      SELECT l.*, 
+             COUNT(a.id) as assessment_count,
+             MAX(a.completed_at) as last_assessment,
+             MAX(a.overall_score) as latest_score,
+             MAX(a.dimension_scores) as latest_dimension_scores,
+             MAX(a.assessment_type) as latest_assessment_type
       FROM leads l
       LEFT JOIN assessments a ON l.id = a.lead_id
       GROUP BY l.id
@@ -364,7 +420,45 @@ app.get('/api/admin/leads', async (c) => {
       LIMIT 100
     `).all()
     
-    return c.json({ leads: results })
+    // Transform leads for scoring
+    const leadsForScoring: LeadProfile[] = results
+      .filter((lead: any) => lead.assessment_count > 0) // Only leads with assessments
+      .map((lead: any) => ({
+        id: lead.id,
+        email: lead.email,
+        companyName: lead.company_name,
+        contactName: lead.contact_name,
+        jobTitle: lead.job_title,
+        industry: lead.industry,
+        companySize: lead.company_size,
+        overallScore: lead.latest_score || 0,
+        dimensionScores: lead.latest_dimension_scores ? JSON.parse(lead.latest_dimension_scores) : {},
+        assessmentType: lead.latest_assessment_type || 'CORE',
+        completedAt: lead.last_assessment || lead.created_at
+      }))
+    
+    // Apply lead scoring
+    const scoringEngine = new LeadScoringEngine()
+    const scoredLeads = scoringEngine.scoreLeads(leadsForScoring)
+    
+    // Sort by lead score (hot leads first)
+    scoredLeads.sort((a, b) => b.leadScore.totalScore - a.leadScore.totalScore)
+    
+    // Add scoring info back to all leads
+    const allLeadsWithScoring = results.map((lead: any) => {
+      const scoredLead = scoredLeads.find(sl => sl.id === lead.id)
+      return {
+        ...lead,
+        leadScore: scoredLead?.leadScore || null
+      }
+    })
+    
+    return c.json({ 
+      leads: allLeadsWithScoring,
+      hotLeads: scoredLeads.filter(l => l.leadScore.priority === 'HOT').length,
+      warmLeads: scoredLeads.filter(l => l.leadScore.priority === 'WARM').length,
+      coldLeads: scoredLeads.filter(l => l.leadScore.priority === 'COLD').length
+    })
   } catch (error) {
     console.error('Error fetching leads:', error)
     return c.json({ error: 'Failed to fetch leads' }, 500)
@@ -406,6 +500,239 @@ app.get('/api/admin/analytics', async (c) => {
   } catch (error) {
     console.error('Error fetching analytics:', error)
     return c.json({ error: 'Failed to fetch analytics' }, 500)
+  }
+})
+
+// Consultation Booking Routes
+
+// Create consultation booking
+app.post('/api/consultations', zValidator('json', consultationBookingSchema), async (c) => {
+  const { env } = c
+  const bookingData = c.req.valid('json')
+  
+  try {
+    const consultationService = new ConsultationService(env.DB)
+    const bookingId = await consultationService.createBooking(bookingData)
+    
+    if (bookingId) {
+      // Send notification to admin
+      await env.DB.prepare(`
+        INSERT INTO notifications (assessment_id, email_type, recipient_email)
+        VALUES (?, 'CONSULTATION_REQUESTED', ?)
+      `).bind(bookingData.assessmentId || null, env.ADMIN_EMAIL || 'shane@forvismazars.com').run()
+      
+      return c.json({ 
+        bookingId, 
+        message: 'Consultation booking created successfully',
+        status: 'PENDING'
+      })
+    }
+    
+    return c.json({ error: 'Failed to create booking' }, 500)
+  } catch (error) {
+    console.error('Error creating consultation booking:', error)
+    return c.json({ error: 'Failed to create booking' }, 500)
+  }
+})
+
+// Get available consultation slots
+app.get('/api/consultations/availability', async (c) => {
+  const { env } = c
+  const specialization = c.req.query('specialization')
+  const date = c.req.query('date')
+  
+  try {
+    const consultationService = new ConsultationService(env.DB)
+    const slots = await consultationService.getAvailableSlots(specialization, date)
+    
+    return c.json({ availableSlots: slots })
+  } catch (error) {
+    console.error('Error fetching availability:', error)
+    return c.json({ error: 'Failed to fetch availability' }, 500)
+  }
+})
+
+// Get consultation bookings for a lead
+app.get('/api/consultations/lead/:leadId', async (c) => {
+  const { env } = c
+  const leadId = parseInt(c.req.param('leadId'))
+  
+  try {
+    const consultationService = new ConsultationService(env.DB)
+    const bookings = await consultationService.getBookingsByLead(leadId)
+    
+    return c.json({ bookings })
+  } catch (error) {
+    console.error('Error fetching lead bookings:', error)
+    return c.json({ error: 'Failed to fetch bookings' }, 500)
+  }
+})
+
+// Admin: Get all pending bookings
+app.get('/api/admin/consultations', async (c) => {
+  const { env } = c
+  
+  try {
+    const consultationService = new ConsultationService(env.DB)
+    const bookings = await consultationService.getPendingBookings()
+    
+    return c.json({ bookings })
+  } catch (error) {
+    console.error('Error fetching admin bookings:', error)
+    return c.json({ error: 'Failed to fetch bookings' }, 500)
+  }
+})
+
+// Admin: Confirm consultation booking
+app.put('/api/admin/consultations/:id/confirm', async (c) => {
+  const { env } = c
+  const bookingId = parseInt(c.req.param('id'))
+  const { calendarEventId, meetingLink } = await c.req.json()
+  
+  try {
+    const consultationService = new ConsultationService(env.DB)
+    const success = await consultationService.confirmBooking(bookingId, calendarEventId)
+    
+    if (success && meetingLink) {
+      // Update meeting link
+      await env.DB.prepare(`
+        UPDATE consultation_bookings 
+        SET meeting_link = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).bind(meetingLink, bookingId).run()
+    }
+    
+    return c.json({ 
+      success,
+      message: success ? 'Booking confirmed successfully' : 'Failed to confirm booking'
+    })
+  } catch (error) {
+    console.error('Error confirming booking:', error)
+    return c.json({ error: 'Failed to confirm booking' }, 500)
+  }
+})
+
+// Monitoring and Continuous Assessment Routes
+
+// Get monitoring schedules for a lead
+app.get('/api/monitoring/lead/:leadId', async (c) => {
+  const { env } = c
+  const leadId = parseInt(c.req.param('leadId'))
+  
+  try {
+    const { results } = await env.DB.prepare(`
+      SELECT ms.*, a.overall_score, a.assessment_type
+      FROM monitoring_schedules ms
+      JOIN assessments a ON ms.assessment_id = a.id
+      WHERE ms.lead_id = ?
+      ORDER BY ms.created_at DESC
+    `).bind(leadId).all()
+    
+    return c.json({ 
+      schedules: results.map((row: any) => ({
+        ...row,
+        notificationSchedule: row.notification_schedule ? JSON.parse(row.notification_schedule) : []
+      }))
+    })
+  } catch (error) {
+    console.error('Error fetching monitoring schedules:', error)
+    return c.json({ error: 'Failed to fetch monitoring schedules' }, 500)
+  }
+})
+
+// Admin: Get monitoring dashboard stats
+app.get('/api/admin/monitoring/stats', async (c) => {
+  const { env } = c
+  
+  try {
+    const monitoringService = new MonitoringService(env.DB)
+    const stats = await monitoringService.getMonitoringStats()
+    
+    return c.json({ stats })
+  } catch (error) {
+    console.error('Error fetching monitoring stats:', error)
+    return c.json({ error: 'Failed to fetch monitoring stats' }, 500)
+  }
+})
+
+// Admin: Get due assessments
+app.get('/api/admin/monitoring/due', async (c) => {
+  const { env } = c
+  const daysAhead = parseInt(c.req.query('days') || '30')
+  
+  try {
+    const monitoringService = new MonitoringService(env.DB)
+    const dueAssessments = await monitoringService.getDueAssessments(daysAhead)
+    
+    return c.json({ dueAssessments })
+  } catch (error) {
+    console.error('Error fetching due assessments:', error)
+    return c.json({ error: 'Failed to fetch due assessments' }, 500)
+  }
+})
+
+// Admin: Pause/Resume monitoring
+app.put('/api/admin/monitoring/:id/:action', async (c) => {
+  const { env } = c
+  const scheduleId = parseInt(c.req.param('id'))
+  const action = c.req.param('action') // 'pause' or 'resume'
+  
+  try {
+    const monitoringService = new MonitoringService(env.DB)
+    let success = false
+    
+    if (action === 'pause') {
+      success = await monitoringService.pauseMonitoring(scheduleId)
+    } else if (action === 'resume') {
+      success = await monitoringService.resumeMonitoring(scheduleId)
+    }
+    
+    return c.json({ 
+      success,
+      message: success ? `Monitoring ${action}d successfully` : `Failed to ${action} monitoring`
+    })
+  } catch (error) {
+    console.error(`Error ${action}ing monitoring:`, error)
+    return c.json({ error: `Failed to ${action} monitoring` }, 500)
+  }
+})
+
+// Admin: Process pending monitoring notifications
+app.post('/api/admin/monitoring/process-notifications', async (c) => {
+  const { env } = c
+  
+  try {
+    const monitoringService = new MonitoringService(env.DB)
+    const pendingNotifications = await monitoringService.getPendingNotifications()
+    
+    let processed = 0
+    let failed = 0
+    
+    for (const notification of pendingNotifications) {
+      try {
+        // In a real implementation, you would send the email here
+        // For now, we'll just mark as sent
+        const success = await monitoringService.markNotificationSent(notification.id!)
+        if (success) {
+          processed++
+        } else {
+          failed++
+        }
+      } catch (error) {
+        console.error('Error processing notification:', error)
+        failed++
+      }
+    }
+    
+    return c.json({ 
+      totalPending: pendingNotifications.length,
+      processed,
+      failed,
+      message: `Processed ${processed} notifications, ${failed} failed`
+    })
+  } catch (error) {
+    console.error('Error processing notifications:', error)
+    return c.json({ error: 'Failed to process notifications' }, 500)
   }
 })
 

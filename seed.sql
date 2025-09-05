@@ -94,3 +94,14 @@ INSERT OR IGNORE INTO industry_benchmarks (industry, dimension, average_score, t
 ('Manufacturing', 'Innovation & Agility', 67.1, 84.9, 70.6),
 ('Manufacturing', 'Workforce & Culture', 61.5, 79.8, 65.2),
 ('Manufacturing', 'Execution & Operations', 71.3, 88.6, 74.9);
+
+-- Sample consultation availability (next 30 days)
+INSERT OR IGNORE INTO consultation_availability (consultant_name, consultant_email, specialization, available_date, start_time, end_time, timezone, duration, max_bookings, current_bookings) VALUES 
+  ('Shane Mitchell', 'shane@forvismazars.com', 'STRATEGY', date('now', '+3 days'), '09:00', '10:30', 'UTC', 90, 1, 0),
+  ('Shane Mitchell', 'shane@forvismazars.com', 'STRATEGY', date('now', '+3 days'), '14:00', '15:30', 'UTC', 90, 1, 0),
+  ('Shane Mitchell', 'shane@forvismazars.com', 'TECHNICAL', date('now', '+5 days'), '10:00', '11:15', 'UTC', 75, 1, 0),
+  ('Shane Mitchell', 'shane@forvismazars.com', 'TECHNICAL', date('now', '+5 days'), '15:00', '16:15', 'UTC', 75, 1, 0),
+  ('Shane Mitchell', 'shane@forvismazars.com', 'IMPLEMENTATION', date('now', '+7 days'), '09:00', '10:00', 'UTC', 60, 1, 0),
+  ('Shane Mitchell', 'shane@forvismazars.com', 'IMPLEMENTATION', date('now', '+7 days'), '11:00', '12:00', 'UTC', 60, 1, 0),
+  ('Shane Mitchell', 'shane@forvismazars.com', 'STRATEGY', date('now', '+10 days'), '09:00', '10:30', 'UTC', 90, 1, 0),
+  ('Shane Mitchell', 'shane@forvismazars.com', 'STRATEGY', date('now', '+10 days'), '14:00', '15:30', 'UTC', 90, 1, 0);
