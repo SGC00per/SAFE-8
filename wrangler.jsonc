@@ -1,34 +1,30 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "webapp",
-  "compatibility_date": "2025-09-05",
+  "name": "safe8-assessment",
+  "main": "src/index.tsx",
+  "compatibility_date": "2024-01-01",
+  "compatibility_flags": ["nodejs_compat"],
   "pages_build_output_dir": "./dist",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
-  // "vars": {
-  //   "MY_VAR": "my-variable"
-  // },
-  // "kv_namespaces": [
-  //   {
-  //     "binding": "MY_KV_NAMESPACE",
-  //     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  //   }
-  // ],
-  // "r2_buckets": [
-  //   {
-  //     "binding": "MY_BUCKET",
-  //     "bucket_name": "my-bucket"
-  //   }
-  // ],
-  // "d1_databases": [
-  //   {
-  //     "binding": "MY_DB",
-  //     "database_name": "my-database",
-  //     "database_id": ""
-  //   }
-  // ],
-  // "ai": {
-  //   "binding": "AI"
-  // }
+
+  // D1 Database configuration
+  // IMPORTANT: Create production database first: npx wrangler d1 create safe8-assessment-db
+  // Local development automatically uses local SQLite with --local flag
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "safe8-assessment-db",
+      "database_id": "YOUR_DATABASE_ID_HERE"
+    }
+  ],
+
+  // Environment variables (use wrangler secret put for sensitive data)
+  "vars": {
+    "ENVIRONMENT": "production"
+  }
+
+  // Uncomment when you have email service configured
+  // "secrets": [
+  //   "EMAIL_API_KEY",
+  //   "ADMIN_EMAIL"
+  // ]
 }

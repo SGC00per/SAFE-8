@@ -3,12 +3,27 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:sandbox": "wrangler pages dev dist --d1=safe8-assessment-db --local --ip 0.0.0.0 --port 3000",
     "build": "vite build",
-    "preview": "wrangler pages dev",
-    "deploy": "npm run build && wrangler pages deploy",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+    "preview": "wrangler pages dev dist",
+    "deploy": "npm run build && wrangler pages deploy dist",
+    "deploy:prod": "npm run build && wrangler pages deploy dist --project-name safe8-assessment",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "clean-port": "fuser -k 3000/tcp 2>/dev/null || true",
+    "test": "curl http://localhost:3000",
+    "db:migrate:local": "wrangler d1 migrations apply safe8-assessment-db --local",
+    "db:migrate:prod": "wrangler d1 migrations apply safe8-assessment-db",
+    "db:seed": "wrangler d1 execute safe8-assessment-db --local --file=./seed.sql",
+    "db:reset": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate:local && npm run db:seed",
+    "db:console:local": "wrangler d1 execute safe8-assessment-db --local",
+    "db:console:prod": "wrangler d1 execute safe8-assessment-db",
+    "git:commit": "git add . && git commit -m",
+    "git:status": "git status",
+    "git:log": "git log --oneline"
   },
   "dependencies": {
+    "@hono/zod-validator": "^0.7.2",
+    "@types/node": "^24.3.1",
     "hono": "^4.9.6"
   },
   "devDependencies": {
